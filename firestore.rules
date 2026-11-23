@@ -1,0 +1,78 @@
+rules_version = '2';
+
+// Money, capacity, terms and Stripe ids are written only by Cloud Functions
+// (the Admin SDK bypasses these rules). Browsers can read their own records
+// and edit a few profile fields; nothing else.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isOwner() { return signedIn() && request.auth.token.owner == true; }
+    function isSelf(uid) { return signedIn() && request.auth.uid == uid; }
+
+    // Profile fields a resident may set themselves.
+    function onlyProfileFields() {
+      return request.resource.data.diff(resource == null ? {} : resource.data)
+        .affectedKeys()
+        .hasOnly(['name', 'phone', 'email', 'defaultPropertyId', 'defaultBuildingLabel', 'defaultUnitLabel', 'defaultInstructions']);
+    }
+
+    match /users/{uid} {
+      allow read: if isSelf(uid) || isOwner();
+      // stripeCustomerId and registrationTerms can only be set by the server.
+      allow create, update: if isSelf(uid) && onlyProfileFields();
+      allow delete: if false;
+    }
+
+    match /properties/{propertyId} {
+      allow read: if signedIn();
+      allow write: if isOwner();
+    }
+
+    match /bookings/{bookingId} {
+      allow read: if signedIn() && (resource.data.uid == request.auth.uid || isOwner());
+      allow write: if false;
+
+      match /refunds/{refundId} {
+        allow read: if isOwner();
+        allow write: if false;
+      }
+    }
+
+    // Night totals let the calendar grey out full nights. Counts only, no personal data.
+    match /nights/{date} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    match /refundRequests/{requestId} {
+      allow read: if signedIn() && (resource.data.uid == request.auth.uid || isOwner());
+      allow write: if false;
+    }
+
+    // Help → Report a problem. Residents create their own; only the owner changes status.
+    match /supportRequests/{requestId} {
+      allow read: if signedIn() && (resource.data.uid == request.auth.uid || isOwner());
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'open'
+        && request.resource.data.keys().hasOnly(['uid', 'bookingId', 'category', 'message', 'contactName', 'contactEmail', 'status', 'createdAt'])
+        && request.resource.data.category in ['missed_pickup', 'billing', 'damage', 'account', 'other']
+        && request.resource.data.message is string
+        && request.resource.data.message.size() >= 10
+        && request.resource.data.message.size() <= 2000;
+      allow update: if isOwner()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'ownerNote', 'updatedAt'])
+        && request.resource.data.status in ['open', 'in_progress', 'resolved'];
+      allow delete: if false;
+    }
+
+    match /auditLog/{entryId} {
+      allow read: if isOwner();
+      allow write: if false;
+    }
+
+    match /unitNights/{key} { allow read, write: if false; }
+    match /webhookEvents/{eventId} { allow read, write: if false; }
+  }
+}
