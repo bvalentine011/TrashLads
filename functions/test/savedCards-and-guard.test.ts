@@ -54,6 +54,11 @@ describe("live-mode guard", () => {
     expect(assertKeyAllowed("sk_live_123", { ...allGates, LIVE_PAYMENTS_ENABLED: "true" })).toBe(true);
   });
 
+  it("refuses a live key while App Check is switched off", () => {
+    expect(() => assertKeyAllowed("sk_live_123", { ...allGates, LIVE_PAYMENTS_ENABLED: "true", ENFORCE_APP_CHECK: "false" })).toThrow(/App Check/);
+    expect(assertKeyAllowed("sk_test_123", { ENFORCE_APP_CHECK: "false" })).toBe(false);
+  });
+
   it("refuses missing or malformed keys", () => {
     expect(() => assertKeyAllowed(undefined, {})).toThrow(/not set/);
     expect(() => assertKeyAllowed("pk_test_123", {})).toThrow(/doesn't look like/);

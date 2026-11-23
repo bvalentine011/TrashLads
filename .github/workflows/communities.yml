@@ -1,0 +1,27 @@
+# Loads the communities in communities.json into the app.
+# Edit communities.json on GitHub, then Actions → Update communities → Run workflow.
+name: Update communities
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  communities:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm, cache-dependency-path: functions/package-lock.json }
+      - run: npm ci --prefix functions
+      - name: Save communities
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
+          export GOOGLE_CLOUD_PROJECT="$(jq -r .projects.default .firebaserc)"
+          node functions/scripts/seed-communities.cjs
+          rm -f "$RUNNER_TEMP/sa.json"

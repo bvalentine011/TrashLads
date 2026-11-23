@@ -24,6 +24,9 @@ export function assertKeyAllowed(secretKey: string | undefined, env: Env): boole
   if (secretKey.startsWith("sk_test_") || secretKey.startsWith("rk_test_")) return false;
   if (secretKey.startsWith("sk_live_") || secretKey.startsWith("rk_live_")) {
     const missing = missingGoLiveGates(env);
+    if (env.ENFORCE_APP_CHECK === "false") {
+      throw new Error("Live Stripe key refused: App Check must be enforced before taking real payments (remove ENFORCE_APP_CHECK=false).");
+    }
     if (env.LIVE_PAYMENTS_ENABLED !== "true" || missing.length) {
       throw new Error(
         `Live Stripe key refused. Set LIVE_PAYMENTS_ENABLED=true and finish: ${missing.join(", ") || "(all gates set)"}`,

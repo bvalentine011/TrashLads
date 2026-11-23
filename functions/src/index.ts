@@ -22,6 +22,12 @@ const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = defineSecret("STRIPE_WEBHOOK_SECRET");
 const secrets = [STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET];
 const region = "us-east1";
+/**
+ * App Check blocks calls that don't come from your real website. It's on unless
+ * ENFORCE_APP_CHECK=false is set in functions/.env, which is only allowed in test mode:
+ * the live-mode guard refuses a live Stripe key while it's off.
+ */
+const enforceAppCheck = process.env.ENFORCE_APP_CHECK !== "false";
 
 initializeApp();
 const db = getFirestore();
@@ -46,7 +52,7 @@ function callerOf(req: CallableRequest): Caller {
 
 /** Wraps a service so AppErrors reach the client as typed HttpsErrors and nothing else leaks. */
 function callable<T>(fn: (ctx: Ctx, caller: Caller, data: any) => Promise<T>) {
-  return onCall({ region, secrets, enforceAppCheck: true }, async (req) => {
+  return onCall({ region, secrets, enforceAppCheck }, async (req) => {
     const caller = callerOf(req);
     try {
       return await fn(context().ctx, caller, req.data ?? {});

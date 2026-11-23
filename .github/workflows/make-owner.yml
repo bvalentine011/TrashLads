@@ -1,0 +1,37 @@
+# Gives an existing account owner access (the Route and Support screens).
+# Actions → Make owner → Run workflow, then enter the account's email.
+name: Make owner
+
+on:
+  workflow_dispatch:
+    inputs:
+      email:
+        description: Email of an account that already exists in the app
+        required: true
+      remove:
+        description: Remove owner access instead
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  owner:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm, cache-dependency-path: functions/package-lock.json }
+      - run: npm ci --prefix functions
+      - name: Set owner access
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          EMAIL: ${{ inputs.email }}
+          REMOVE: ${{ inputs.remove }}
+        run: |
+          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
+          export GOOGLE_CLOUD_PROJECT="$(jq -r .projects.default .firebaserc)"
+          if [ "$REMOVE" = "true" ]; then node functions/scripts/set-owner.cjs "$EMAIL" --remove; else node functions/scripts/set-owner.cjs "$EMAIL"; fi
+          rm -f "$RUNNER_TEMP/sa.json"
