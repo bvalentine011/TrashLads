@@ -44,7 +44,7 @@ Open the address it prints. A yellow bar marks demo mode: sample data, pretend p
 
 ## Set up the real app
 
-You need a Firebase project on the **Blaze** plan (Cloud Functions require it; small usage stays in the free tier), a Stripe account in test mode, and Node 20.
+You need a Firebase project on the **Blaze** plan (Cloud Functions require it; small usage stays in the free tier), a Stripe account in test mode, and Node 22.
 
 1. **Firebase project.** Create one at console.firebase.google.com, then put its id in `.firebaserc`.
 2. **Turn on:**
