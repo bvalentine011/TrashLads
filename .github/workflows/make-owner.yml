@@ -15,6 +15,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   owner:
@@ -24,14 +25,15 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm, cache-dependency-path: functions/package-lock.json }
       - run: npm ci --prefix functions
+      - name: Sign in to Google Cloud (keyless, via GitHub's identity)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/28653610924/locations/global/workloadIdentityPools/github/providers/trashlads-repo
+          service_account: github-deployer@trash-lads-4391d.iam.gserviceaccount.com
       - name: Set owner access
         env:
-          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           EMAIL: ${{ inputs.email }}
           REMOVE: ${{ inputs.remove }}
         run: |
-          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
-          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
           export GOOGLE_CLOUD_PROJECT="$(jq -r .projects.default .firebaserc)"
           if [ "$REMOVE" = "true" ]; then node functions/scripts/set-owner.cjs "$EMAIL" --remove; else node functions/scripts/set-owner.cjs "$EMAIL"; fi
-          rm -f "$RUNNER_TEMP/sa.json"

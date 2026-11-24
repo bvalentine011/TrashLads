@@ -8,6 +8,7 @@ on:
 concurrency: deploy
 permissions:
   contents: read
+  id-token: write # lets GitHub prove its identity to Google, so no key file is needed
 
 jobs:
   deploy:
@@ -17,11 +18,9 @@ jobs:
 
       - name: Check that the setup secrets are in place
         env:
-          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
         run: |
           missing=""
-          [ -n "$SA" ] || missing="$missing FIREBASE_SERVICE_ACCOUNT"
           [ -n "$STRIPE_SECRET_KEY" ] || missing="$missing STRIPE_SECRET_KEY"
           if [ -n "$missing" ]; then echo "::error::Add these in Settings → Secrets and variables → Actions:$missing"; exit 1; fi
           if [ "$(jq -r .projects.default .firebaserc)" = "your-firebase-project-id" ]; then echo "::error::Set your Firebase project id in .firebaserc"; exit 1; fi
@@ -50,13 +49,14 @@ jobs:
           npm --prefix functions test
           npm --prefix web run typecheck
 
-      - name: Sign in to Google Cloud
-        env:
-          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-        run: |
-          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
-          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
-          echo "PROJECT=$(jq -r .projects.default .firebaserc)" >> "$GITHUB_ENV"
+      - name: Sign in to Google Cloud (keyless, via GitHub's identity)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/28653610924/locations/global/workloadIdentityPools/github/providers/trashlads-repo
+          service_account: github-deployer@trash-lads-4391d.iam.gserviceaccount.com
+
+      - name: Read the project id
+        run: echo "PROJECT=$(jq -r .projects.default .firebaserc)" >> "$GITHUB_ENV"
 
       - name: Store the Stripe keys in Google Secret Manager
         env:
@@ -75,7 +75,3 @@ jobs:
           echo "### Deployed" >> "$GITHUB_STEP_SUMMARY"
           echo "- Website: https://$PROJECT.web.app" >> "$GITHUB_STEP_SUMMARY"
           echo "- Stripe webhook URL: https://us-east1-$PROJECT.cloudfunctions.net/stripeWebhook" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Remove the credentials file
-        if: always()
-        run: rm -f "$RUNNER_TEMP/sa.json"
