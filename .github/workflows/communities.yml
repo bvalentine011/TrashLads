@@ -1,0 +1,28 @@
+# Loads the communities in communities.json into the app.
+# Edit communities.json on GitHub, then Actions → Update communities → Run workflow.
+name: Update communities
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  communities:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: functions/package-lock.json }
+      - run: npm ci --prefix functions
+      - name: Sign in to Google Cloud (keyless, via GitHub's identity)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/28653610924/locations/global/workloadIdentityPools/github/providers/trashlads-repo
+          service_account: github-deployer@trash-lads-4391d.iam.gserviceaccount.com
+      - name: Save communities
+        run: |
+          export GOOGLE_CLOUD_PROJECT="$(jq -r .projects.default .firebaserc)"
+          node functions/scripts/seed-communities.cjs

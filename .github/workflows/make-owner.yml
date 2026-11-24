@@ -1,0 +1,39 @@
+# Gives an existing account owner access (the Route and Support screens).
+# Actions → Make owner → Run workflow, then enter the account's email.
+name: Make owner
+
+on:
+  workflow_dispatch:
+    inputs:
+      email:
+        description: Email of an account that already exists in the app
+        required: true
+      remove:
+        description: Remove owner access instead
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  owner:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: functions/package-lock.json }
+      - run: npm ci --prefix functions
+      - name: Sign in to Google Cloud (keyless, via GitHub's identity)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/28653610924/locations/global/workloadIdentityPools/github/providers/trashlads-repo
+          service_account: github-deployer@trash-lads-4391d.iam.gserviceaccount.com
+      - name: Set owner access
+        env:
+          EMAIL: ${{ inputs.email }}
+          REMOVE: ${{ inputs.remove }}
+        run: |
+          export GOOGLE_CLOUD_PROJECT="$(jq -r .projects.default .firebaserc)"
+          if [ "$REMOVE" = "true" ]; then node functions/scripts/set-owner.cjs "$EMAIL" --remove; else node functions/scripts/set-owner.cjs "$EMAIL"; fi

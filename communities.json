@@ -1,0 +1,17 @@
+[
+  {
+    "id": "sample-commons",
+    "name": "Sample Commons",
+    "placementStartMinutes": 1020,
+    "buildings": [
+      { "label": "Building A" },
+      { "label": "Building B", "units": ["101", "102", "103", "201", "202", "203", "204", "207"] }
+    ]
+  },
+  {
+    "id": "example-lofts",
+    "name": "Example Lofts",
+    "placementStartMinutes": 1050,
+    "buildings": [{ "label": "North" }, { "label": "South" }]
+  }
+]

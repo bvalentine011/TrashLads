@@ -1,0 +1,77 @@
+# Deploys the website, Cloud Functions and Firestore rules to Firebase.
+# Run it from GitHub: Actions → Deploy → Run workflow.
+name: Deploy
+
+on:
+  workflow_dispatch:
+
+concurrency: deploy
+permissions:
+  contents: read
+  id-token: write # lets GitHub prove its identity to Google, so no key file is needed
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check that the setup secrets are in place
+        env:
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+        run: |
+          missing=""
+          [ -n "$STRIPE_SECRET_KEY" ] || missing="$missing STRIPE_SECRET_KEY"
+          if [ -n "$missing" ]; then echo "::error::Add these in Settings → Secrets and variables → Actions:$missing"; exit 1; fi
+          if [ "$(jq -r .projects.default .firebaserc)" = "your-firebase-project-id" ]; then echo "::error::Set your Firebase project id in .firebaserc"; exit 1; fi
+          # Test mode only. Going live means deliberately changing this line (see docs/PAYMENTS.md).
+          case "$STRIPE_SECRET_KEY" in
+            sk_test_*|rk_test_*) echo "Stripe key is a test key." ;;
+            *) echo "::error::STRIPE_SECRET_KEY must be a test key (sk_test_…) until go-live."; exit 1 ;;
+          esac
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            functions/package-lock.json
+            web/package-lock.json
+
+      - name: Install
+        run: |
+          npm ci --prefix functions
+          npm ci --prefix web
+
+      - name: Test
+        run: |
+          npm --prefix functions run typecheck
+          npm --prefix functions test
+          npm --prefix web run typecheck
+
+      - name: Sign in to Google Cloud (keyless, via GitHub's identity)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/28653610924/locations/global/workloadIdentityPools/github/providers/trashlads-repo
+          service_account: github-deployer@trash-lads-4391d.iam.gserviceaccount.com
+
+      - name: Read the project id
+        run: echo "PROJECT=$(jq -r .projects.default .firebaserc)" >> "$GITHUB_ENV"
+
+      - name: Store the Stripe keys in Google Secret Manager
+        env:
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+        run: |
+          printf '%s' "$STRIPE_SECRET_KEY" | npx -y firebase-tools@14 functions:secrets:set STRIPE_SECRET_KEY --data-file=- --project "$PROJECT" --non-interactive
+          # The webhook secret only exists after the first deploy; a placeholder lets that deploy go through.
+          printf '%s' "${STRIPE_WEBHOOK_SECRET:-whsec_not_set_yet}" | npx -y firebase-tools@14 functions:secrets:set STRIPE_WEBHOOK_SECRET --data-file=- --project "$PROJECT" --non-interactive
+
+      - name: Deploy
+        run: npx -y firebase-tools@14 deploy --project "$PROJECT" --non-interactive --force
+
+      - name: Show the addresses
+        run: |
+          echo "### Deployed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Website: https://$PROJECT.web.app" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Stripe webhook URL: https://us-east1-$PROJECT.cloudfunctions.net/stripeWebhook" >> "$GITHUB_STEP_SUMMARY"
