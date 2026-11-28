@@ -3,7 +3,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import { defineSecret } from "firebase-functions/params";
 import { HttpsError, onCall, onRequest, type CallableRequest } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
-import { logger } from "firebase-functions/v2";
+import { logger, setGlobalOptions } from "firebase-functions/v2";
 import Stripe from "stripe";
 import { FirestoreStore } from "./adapters/firestoreStore";
 import { assertKeyAllowed } from "./adapters/liveModeGuard";
@@ -36,6 +36,12 @@ const enforceAppCheck = process.env.ENFORCE_APP_CHECK !== "false";
  * the webhook verifies Stripe's signature.
  */
 const invoker = "private";
+
+/**
+ * Small, capped instances. New Google Cloud projects have a low CPU allowance per region,
+ * and Trash Lads' traffic needs a fraction of one CPU. This also keeps the bill near zero.
+ */
+setGlobalOptions({ region, memory: "256MiB", cpu: "gcf_gen1", maxInstances: 3 });
 
 initializeApp();
 const db = getFirestore();
