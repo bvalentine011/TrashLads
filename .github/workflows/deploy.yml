@@ -58,6 +58,18 @@ jobs:
       - name: Read the project id
         run: echo "PROJECT=$(jq -r .projects.default .firebaserc)" >> "$GITHUB_ENV"
 
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Switch on the Google services the app uses
+        # Safe to repeat: services that are already on are left alone.
+        run: |
+          gcloud services enable --project "$PROJECT" --quiet \
+            cloudbilling.googleapis.com cloudresourcemanager.googleapis.com serviceusage.googleapis.com \
+            secretmanager.googleapis.com cloudfunctions.googleapis.com cloudbuild.googleapis.com \
+            artifactregistry.googleapis.com run.googleapis.com eventarc.googleapis.com pubsub.googleapis.com \
+            cloudscheduler.googleapis.com firestore.googleapis.com firebaserules.googleapis.com \
+            firebasehosting.googleapis.com identitytoolkit.googleapis.com iamcredentials.googleapis.com
+
       - name: Store the Stripe keys in Google Secret Manager
         env:
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
