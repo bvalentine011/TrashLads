@@ -28,6 +28,14 @@ const region = "us-east1";
  * the live-mode guard refuses a live Stripe key while it's off.
  */
 const enforceAppCheck = process.env.ENFORCE_APP_CHECK !== "false";
+/**
+ * The owner chose (Nov 27, 2026) to keep binporters.com's "Domain restricted sharing"
+ * policy and not grant allUsers. Functions deploy private, and the Deploy workflow turns
+ * off Cloud Run's invoker check (--no-invoker-iam-check) so the website and Stripe can
+ * reach them. Each function still checks its caller: callables verify the user's sign-in,
+ * the webhook verifies Stripe's signature.
+ */
+const invoker = "private";
 
 initializeApp();
 const db = getFirestore();
@@ -52,7 +60,7 @@ function callerOf(req: CallableRequest): Caller {
 
 /** Wraps a service so AppErrors reach the client as typed HttpsErrors and nothing else leaks. */
 function callable<T>(fn: (ctx: Ctx, caller: Caller, data: any) => Promise<T>) {
-  return onCall({ region, secrets, enforceAppCheck }, async (req) => {
+  return onCall({ region, secrets, enforceAppCheck, invoker }, async (req) => {
     const caller = callerOf(req);
     try {
       return await fn(context().ctx, caller, req.data ?? {});
@@ -79,7 +87,7 @@ export const ownerStartNight = callable((ctx, caller, data) => ownerStartRoute(c
 export const removeMyCard = callable((ctx, caller, data) => removeSavedCard(ctx, caller, data));
 
 /** Stripe webhook. Point the Stripe endpoint at this function's URL. */
-export const stripeWebhook = onRequest({ region, secrets, invoker: "public" }, async (req, res) => {
+export const stripeWebhook = onRequest({ region, secrets, invoker }, async (req, res) => {
   if (req.method !== "POST") {
     res.status(405).send("Method not allowed");
     return;

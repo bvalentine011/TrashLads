@@ -82,6 +82,18 @@ jobs:
       - name: Deploy
         run: npx -y firebase-tools@14 deploy --project "$PROJECT" --non-interactive --force
 
+      - name: Let the website and Stripe reach the server functions
+        # Owner's choice: keep the organization's domain-restricted sharing policy and turn
+        # off Cloud Run's invoker check instead of granting allUsers. The functions check
+        # every caller themselves (sign-in, or Stripe's signature).
+        run: |
+          for fn in acceptTerms getCheckoutSetup startBookingPayment cancelMyBooking requestRefund ownerReviewRefund \
+                    ownerIssueRefund startSaveCard listMyCards removeMyCard ownerSetStatus ownerStartNight stripeWebhook; do
+            svc=$(echo "$fn" | tr '[:upper:]' '[:lower:]')
+            gcloud run services update "$svc" --region us-east1 --project "$PROJECT" --no-invoker-iam-check --quiet >/dev/null
+            echo "reachable: $fn"
+          done
+
       - name: Show the addresses
         run: |
           echo "### Deployed" >> "$GITHUB_STEP_SUMMARY"
